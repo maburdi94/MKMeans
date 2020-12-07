@@ -1,4 +1,4 @@
-# project-2-mpi-michael-and-bijaya
+# project-2-mpi-michael, Ilui and-bijaya
 project-2-mpi-michael-and-bijaya created by GitHub Classroom
 
 
