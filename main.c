@@ -17,6 +17,8 @@
  */
 
 
+#define THRESHOLD 0.1
+
 
 // A 3-vector implementation
 typedef struct {
@@ -193,8 +195,34 @@ int main(int argc, char *argv[])
     // Do a byte-by-byte copy from buffer to centroids.
     memcpy(centroids, rbuf, sizeof(vec3)*K);
 
+
+    // This is just for convenience
+    int N = scounts[world_rank];
+
     // Calc the distance index
-    double Jprime = calc_index(rbuf, scounts[world_rank], centroids, K);
+    double Jprime, J;
+    do {
+
+        Jprime = J ? J : calc_index(rbuf, N, centroids, K);
+
+        // Go through all the objects...
+        // Remember: The first K items are the centers, so we have to start from K + 1 (zero-indexed)
+        for (int n = K; n < N; n++) {
+
+            // ...and find the closest centroid
+            for (int k = 0; k < K; k++) {
+
+            }
+
+
+        }
+
+        // Calc the distance index
+        J = calc_index(rbuf, N, centroids, K);
+
+    } while (Jprime - J > THRESHOLD);
+
+
 
     // CONT here on step 7 of MKmeans
 
