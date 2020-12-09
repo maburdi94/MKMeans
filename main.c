@@ -179,12 +179,6 @@ int main(int argc, char *argv[])
     // Distribute vectors among the processes
     MPI_Scatterv(training, scounts, displs, VEC3, rbuf, scounts[world_rank], VEC3, 0, MPI_COMM_WORLD);
 
-    // Print out all the vectors
-    for (int i = 0; i < scounts[world_rank]; i++) {
-        vec3 *vec = rbuf + i;
-        printf("P%d\t<%d,%d,%d>\n", world_rank, vec->x, vec->y, vec->z);
-    } printf("\n");
-
     // Wait for everyone
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -195,52 +189,84 @@ int main(int argc, char *argv[])
     // Do a byte-by-byte copy from buffer to centroids.
     memcpy(centroids, rbuf, sizeof(vec3)*K);
 
+    // Print out all the vectors
+//    for (int i = 0; i < K; i++) {
+//        vec3 *vec = centroids + i;
+//        printf("P%d,%d\t<%d,%d,%d>\n", world_rank, i, vec->x, vec->y, vec->z);
+//    } printf("\n");
+
 
     // This is just for convenience
     int N = scounts[world_rank];
 
     // Calc the distance index
-    double Jprime, J;
+    double Jprime, J = 0;
     do {
 
         Jprime = J ? J : calc_index(rbuf, N, centroids, K);
+
+        // Count the number of items in each cluster so later we can get the average
+        int cluster_counts[K];
+
+        // Initialize all counts to 1. (Later, this will be the denominator to get the mean.)
+        memset(cluster_counts, 1, sizeof(cluster_counts));
 
         // Go through all the objects...
         // Remember: The first K items are the centers, so we have to start from K + 1 (zero-indexed)
         for (int n = K; n < N; n++) {
 
             // ...and find the closest centroid
+            double min_distance;
+            int nearest_k;
             for (int k = 0; k < K; k++) {
+                double distance = calc_distance(rbuf[n], centroids[k]);
 
+                printf("||<%d,%d,%d> - <%d,%d,%d>|| = %f\n", centroids[k].x, centroids[k].y, centroids[k].z, rbuf[n].x, rbuf[n].y, rbuf[n].z, distance);
+
+                if (distance < min_distance) {
+                    min_distance = distance;
+                    nearest_k = k;
+                    printf("New minimum distance of %f", distance);
+                }
             }
 
+            // Add the object to the nearest cluster centroid
+            centroids[nearest_k].x += rbuf[n].x;
+            centroids[nearest_k].y += rbuf[n].y;
+            centroids[nearest_k].z += rbuf[n].z;
 
+            // Keep track of the current cluster count
+            cluster_counts[nearest_k]++;
+
+        }
+
+        printf("P%d:\n", world_rank);
+
+        // Update the centroids by finding the mean of all its objects
+        for (int k = 0; k < K; k++) {
+            centroids[k].x /= cluster_counts[k];
+            centroids[k].y /= cluster_counts[k];
+            centroids[k].z /= cluster_counts[k];
+//            printf("K %d's new center = <%d, %d, %d>\n", k, centroids[k].x, centroids[k].y, centroids[k].z);
         }
 
         // Calc the distance index
         J = calc_index(rbuf, N, centroids, K);
 
+        printf("J' = %f\nJ = %f\nThreshold = %f\n\n", Jprime, J, THRESHOLD);
+
     } while (Jprime - J > THRESHOLD);
 
 
-
-    // CONT here on step 7 of MKmeans
-
-
-    int *rcounts = (int*) malloc(sizeof(int) * world_size);
-
-    for (int i = 0; i < world_size; i++) {
-        rcounts[i] = 1;
-        displs[i] = i == 0 ? 0 : displs[i-1] + rcounts[i-1];
-    }
+    vec3 *all_centroids = (vec3*)malloc(sizeof(vec3) * K * world_size);
 
     // Pick the trivial answer with first vector as center.
-    MPI_Gatherv(rbuf, 1, VEC3, centroids, rcounts, displs, VEC3, 0, MPI_COMM_WORLD);
+    MPI_Gather(centroids, K, VEC3, all_centroids, K*world_size, VEC3, 0, MPI_COMM_WORLD);
 
     if (world_rank == 0) {
-        for (int i = 0; i < world_size; i++) {
-            vec3 vec = centroids[i];
-            printf("P%d center = \t<%d,%d,%d>\n", i, vec.x, vec.y, vec.z);
+        for (int k = 0; k < K; k++) {
+            vec3 vec = all_centroids[k];
+            printf("K %d\tcenter = \t<%d,%d,%d>\n", k, vec.x, vec.y, vec.z);
         }
         printf("\n");
     }
@@ -251,7 +277,6 @@ int main(int argc, char *argv[])
 //
     free(training);
 //    free(center);
-    free(rcounts);
     free(centroids);
     free(displs);
     free(scounts);
