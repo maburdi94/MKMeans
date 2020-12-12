@@ -70,7 +70,7 @@ void merge(vec3 **final_set, vec3 *all_sets, int K, int N) {
  * then the array will be reallocated with {capacity} more elements.
  * @return The exact number of items read from the file.
  */
-int loadInputData(vec3 **data, int capacity) {
+int loadInputData(vec3 **data, char *filename, int capacity) {
 
     // Track number of items read
     int count = 0;
@@ -81,7 +81,7 @@ int loadInputData(vec3 **data, int capacity) {
     char line[256], *pEnd;
 
     // Open file
-    FILE *file = fopen("input3.txt", "r");
+    FILE *file = fopen(filename == NULL ? "input.txt" : filename, "r");
 
     // Line-by-line extract 3 values and add push them into array
     while ( fgets(line, sizeof(line), file) != NULL) {
@@ -96,7 +96,7 @@ int loadInputData(vec3 **data, int capacity) {
         // Allocate memory in chunks of capacity as needed
         if (count % capacity == 0) {
             capacity += capacity;
-            *data = (vec3*) realloc(data, capacity);
+            *data = (vec3*) realloc(*data, capacity);
         }
     }
 
@@ -136,8 +136,11 @@ int main(int argc, char *argv[])
 
 
     if (world_rank == 0) {
+
+        char *filename = argc > 2 ? argv[2] : NULL;
+
         // Process 0 reads input
-        count = loadInputData(&training, 50);
+        count = loadInputData(&training, filename, 50);
 
         printf("Number of clusters: %d\n", K);
 
