@@ -57,6 +57,12 @@ double calc_index(vec3 *objects, int N, vec3 *centroids, int K) {
 }
 
 
+void merge(vec3 **final_set, vec3 *all_sets, int K, int N) {
+
+
+}
+
+
 /**
  * Load in data from a text file where every line contains 3 numerical integer values separated by spaces.
  * @param data - A pointer to an array that will be filled with the values retrieved.
@@ -143,7 +149,8 @@ int main(int argc, char *argv[])
             MPI_Finalize();
 
             // Terminate with error.
-            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+//            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -189,12 +196,6 @@ int main(int argc, char *argv[])
     // Do a byte-by-byte copy from buffer to centroids.
     memcpy(centroids, rbuf, sizeof(vec3)*K);
 
-    // Print out all the vectors
-//    for (int i = 0; i < K; i++) {
-//        vec3 *vec = centroids + i;
-//        printf("P%d,%d\t<%d,%d,%d>\n", world_rank, i, vec->x, vec->y, vec->z);
-//    } printf("\n");
-
 
     // This is just for convenience
     int N = scounts[world_rank];
@@ -209,7 +210,9 @@ int main(int argc, char *argv[])
         int cluster_counts[K];
 
         // Initialize all counts to 1. (Later, this will be the denominator to get the mean.)
-        memset(cluster_counts, 1, sizeof(cluster_counts));
+        for (int i = 0; i < K; i++) cluster_counts[i] = 1;
+
+
 
         // Go through all the objects...
         // Remember: The first K items are the centers, so we have to start from K + 1 (zero-indexed)
@@ -220,13 +223,9 @@ int main(int argc, char *argv[])
             int nearest_k;
             for (int k = 0; k < K; k++) {
                 double distance = calc_distance(rbuf[n], centroids[k]);
-
-                printf("||<%d,%d,%d> - <%d,%d,%d>|| = %f\n", centroids[k].x, centroids[k].y, centroids[k].z, rbuf[n].x, rbuf[n].y, rbuf[n].z, distance);
-
                 if (distance < min_distance) {
                     min_distance = distance;
                     nearest_k = k;
-                    printf("New minimum distance of %f", distance);
                 }
             }
 
@@ -240,35 +239,48 @@ int main(int argc, char *argv[])
 
         }
 
-        printf("P%d:\n", world_rank);
 
         // Update the centroids by finding the mean of all its objects
         for (int k = 0; k < K; k++) {
             centroids[k].x /= cluster_counts[k];
             centroids[k].y /= cluster_counts[k];
             centroids[k].z /= cluster_counts[k];
-//            printf("K %d's new center = <%d, %d, %d>\n", k, centroids[k].x, centroids[k].y, centroids[k].z);
         }
 
         // Calc the distance index
         J = calc_index(rbuf, N, centroids, K);
 
+
+        for (int i = 0; i < K; i++) {
+            vec3 vec = centroids[i];
+            printf("P%d,%d\t<%d,%d,%d>\n", world_rank, i, vec.x, vec.y, vec.z);
+        }
+
         printf("J' = %f\nJ = %f\nThreshold = %f\n\n", Jprime, J, THRESHOLD);
 
-    } while (Jprime - J > THRESHOLD);
+    } while (Jprime - J >= THRESHOLD);
 
 
     vec3 *all_centroids = (vec3*)malloc(sizeof(vec3) * K * world_size);
 
     // Pick the trivial answer with first vector as center.
-    MPI_Gather(centroids, K, VEC3, all_centroids, K*world_size, VEC3, 0, MPI_COMM_WORLD);
+    MPI_Gather(centroids, K, VEC3, all_centroids, K, VEC3, 0, MPI_COMM_WORLD);
+
+
+    // Currently all_centroids contains N*K clusters.
+    // K clusters for each of N processes.
+    // [ [p11 p12 ... p1K] [p21 p22 ... p2K] ... [pN1 pN2 ...pNK] ]
+
 
     if (world_rank == 0) {
-        for (int k = 0; k < K; k++) {
-            vec3 vec = all_centroids[k];
-            printf("K %d\tcenter = \t<%d,%d,%d>\n", k, vec.x, vec.y, vec.z);
+        for (int i = 0; i < world_size; i++) {
+            printf("Process %d centroids\n", i);
+            for (int k = 0; k < K; k++) {
+                vec3 vec = all_centroids[i*K + k];
+                printf("<%d,%d,%d>\n", vec.x, vec.y, vec.z);
+            }
+            printf("\n");
         }
-        printf("\n");
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
