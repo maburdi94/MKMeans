@@ -2,3 +2,6 @@ cmake*
 .idea*
 inclass*
 *.out
+/.vs/ProjectSettings.json
+/.vs/slnx.sqlite
+/.vs/slnx.sqlite-journal
